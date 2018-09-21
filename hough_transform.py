@@ -161,26 +161,34 @@ hits, cells, particles, truth  = load_event("../train_sample/train_100_events/ev
 conformal_map(data)
 conformal_map(hits)
 
-x_0 = [8, 0.001, 0.0002]
-def transform(X):
-    thresh=int(X[0])
-    max_from_center=X[1]
-    max_dist_from_line=X[2]
+X = [8, 0.001, 0.0002]
+thresh=int(X[0])
+max_from_center=X[1]
+max_dist_from_line=X[2]
 
-    hist = bin_plot(data, num_bins=1000, binary=True, mapped=True)
+hist = bin_plot(data, num_bins=1000, binary=True, mapped=True)
 
-    lines = get_lines(hist, num_bins = 1000, num_angles=800, thresh=thresh, max_dist=max_from_center)
+lines = get_lines(hist, num_bins = 1000, num_angles=800, thresh=thresh, max_dist=max_from_center)
 
-    get_line_tracks(data, lines, max_dist=max_dist_from_line)
+def tracks(thresh):
+    lines = get_lines(hist, num_bins = 1000, num_angles=800, thresh=int(thresh), max_dist=0.001)
+    get_line_tracks(data, lines, max_dist=0.0001)
 
     score_list, avg_score = line_score(data, lines)
     res = sum((i-1.0)**2 for i in score_list) + abs(len(score_list) - 100)
+    print(thresh)
     print(str(res) + " : "+str(score_list)+" : "+str(avg_score))
+    return res
 
-    return(res)
+thresholds = np.linspace(0, 20, num=20)
+scores = np.vectorize(tracks)(thresholds)
 
-optimize = sp.optimize.minimize(transform, x0=[8, 0.001, 0.0002], method="TNC", bounds=[(0.0, None), (0.0, None), (0.0, None)])
-print(optimize.x)
+plt.plot(thresholds, scores)
+plt.show()
+
+
+#optimize = sp.optimize.minimize(transform, x0=[8, 0.001, 0.0002], method="Nelder-Mead", bounds=[(0.0, None), (0.0, None), (0.0, None)])
+#print(optimize.x)
 
 
 '''fig, ax = plt.subplots()
