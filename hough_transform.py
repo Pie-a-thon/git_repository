@@ -82,7 +82,7 @@ def get_lines(hist, num_bins, num_angles=1000, thresh=None, max_dist=-1):
     theta = np.linspace(-np.pi/2, np.pi/2, num=num_angles)
     h, theta, d = hough_line(hist, theta=theta)
 
-    h_peak, theta_peak, d_peak = hough_line_peaks(h, theta, d, threshold=thresh)
+    h_peak, theta_peak, d_peak = hough_line_peaks(h, theta, d, threshold=thresh, min_distance=20)
     gradients = np.vectorize(lambda a: -np.tan((np.pi/2 - a)))(theta_peak)
 
     scaled_intercept_list = []
@@ -157,7 +157,7 @@ def line_score(hits, lines):
     return score_list, avg_score
 
 def line_test(hist, num_bins, num_angles, num_hits):
-    lines = get_lines(hist, num_bins=num_bins, num_angles=num_angles, thresh=0.0, max_dist=0.001)
+    lines = get_lines(hist, num_bins=num_bins, num_angles=num_angles, max_dist=0.001)
     res = (num_hits-len(lines.index.values))**2
     return res
 
@@ -222,15 +222,15 @@ hits, cells, particles, truth  = load_event("../train_sample/train_100_events/ev
 scores = []
 avg_scores = []
 run_list = []
-for i in range(1, 10):
-    df=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV/clusters_"+str(i)+".csv", sep=',', names=["x", "y", "z", "labels", "other", "track"])
-    df_truth=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV/truth_"+str(i)+".csv", sep=',', names=["barcode", "pt", "eta", "phi", "e", "labels"])
+for i in range(1, 100):
+    df=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu100GeV/clusters_"+str(i)+".csv", sep=',', names=["x", "y", "z", "labels", "other", "track"])
+    df_truth=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu100GeV/truth_"+str(i)+".csv", sep=',', names=["barcode", "pt", "eta", "phi", "e", "labels"])
     row = (df_truth.iloc[0].values)
     df_truth = pd.DataFrame({"barcode":row[0], "pt":row[1], "eta":row[2], "phi":row[3], "e":row[4], "labels":row[5]}, index=[1])
     df = df.fillna(0.0)
     conformal_map(df)
-    hist = bin_plot(df, num_bins=1600, mapped=True)
-    lines = get_lines(hist, num_bins=1600, num_angles=1800, max_dist=0.001)
+    hist = bin_plot(df, num_bins=200, mapped=True)
+    lines = get_lines(hist, num_bins=200, num_angles=100, max_dist=0.0007)
     get_line_tracks(df, lines)
     score_list, avg_score = line_score(df, lines)
     scores.append(avg_score)
@@ -238,7 +238,7 @@ for i in range(1, 10):
     avg_scores.append(average)
     run_list.append(i)
 
-data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 1)
+'''data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 1)
 conformal_map(data)
 columns = np.linspace(500, 2000, num = 20)
 rows = np.linspace(500, 2000, num = 20)
@@ -254,7 +254,7 @@ for j in columns:
         heatmap.to_csv("bins_angles_"+str(int(i))+".csv")
 
 plt.imshow(heatmap)
-plt.show()
+plt.show()'''
 
 print(lines)
 print(avg_scores)
