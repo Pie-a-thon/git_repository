@@ -6,6 +6,29 @@ import random
 import math as m
 import tensorflow as tf
 from tensorflow import keras
+import pickle
+
+class LossHistory(keras.callbacks.Callback):
+    def on_train_begin(self, logs={}):
+        self.losses = []
+        self.acc = []
+        self.val_losses = []
+        self.val_acc = []
+
+    def on_batch_end(self, batch, logs={}):
+        self.losses.append(logs.get('loss'))
+        self.acc.append(logs.get('acc'))
+        self.val_losses.append(logs.get('val_loss'))
+        self.val_acc.append(logs.get('val_acc'))
+
+
+def save_obj(obj, name ):
+    with open(name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_obj(name ):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
 
 def load_mu(path_to_folder, number):
     list = np.linspace(1,5000, num=5000, dtype=int)
@@ -25,7 +48,7 @@ def load_mu(path_to_folder, number):
 
 def muons():
 
-    data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 100)
+    data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 3)
     features = (data[['x','y','z']]/1000.0)
     particle_ids = data.labels.unique()
     particle_ids = particle_ids[np.where(particle_ids!=0)[0]]
@@ -54,106 +77,243 @@ def muons():
     j =np.random.randint(n, size=size)
     pair = np.hstack((i.reshape(size,1),j.reshape(size,1)))
     pair = pair[((p_id[i]==0) | (p_id[i]!=p_id[j]))]
-'''
-Train0 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.zeros((len(pair),1))))
 
-Train = np.vstack((Train,Train0))
+    Train0 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.zeros((len(pair),1))))
 
-np.random.shuffle(Train)
-print(Train)'''
-#################################################################################################################
-#################################################################################################################
+    Train = np.vstack((Train,Train0))
 
-hits, cells, particles, truth = load_event("../train_sample/train_100_events/event000001000")
-hit_cells = cells.groupby(['hit_id']).value.count().values
-hit_value = cells.groupby(['hit_id']).value.sum().values
-features = np.hstack((hits[['x','y','z']]/1000, hit_cells.reshape(len(hit_cells),1)/10,hit_value.reshape(len(hit_cells),1)))
-particle_ids = truth.particle_id.unique()
-particle_ids = particle_ids[np.where(particle_ids!=0)[0]]
-Train=[]
-pair = []
-for particle_id in particle_ids:
-    hit_ids = truth[truth.particle_id == particle_id].hit_id.values-1
-    for i in hit_ids:
-        for j in hit_ids:
-            if i != j:
-                pair.append([i,j])
-pair = np.array(pair)
-Train1 = np.hstack((features[pair[:,0]], features[pair[:,1]], np.ones((len(pair),1))))
+    np.random.shuffle(Train)
+    print(Train)
+    return Train
 
-if len(Train) == 0:
-    Train = Train1
-else:
-    Train = np.vstack((Train,Train1))
+def get_t_tbar(path):
+    hits = pd.read_csv(path, sep=',', names=["x", "y", "z", "particle_id", "particle_id_1", "particle_id_2"])
+    hits = hits.fillna(0.0)
+    truth = hits
+    print(hits)
+    features = (hits[['x','y','z']]/1000)
 
-n = len(hits)
-size = len(Train1)*3
-p_id = truth.particle_id.values
-i =np.random.randint(n, size=size)
-j =np.random.randint(n, size=size)
-pair = np.hstack((i.reshape(size,1),j.reshape(size,1)))
-pair = pair[((p_id[i]==0) | (p_id[i]!=p_id[j]))]
+    particle_ids = truth.particle_id.unique()
+    particle_ids = particle_ids[np.where(particle_ids!=0)[0]]
+    Train=[]
+    pair = []
+    for particle_id in particle_ids:
+        hit_ids = truth[truth.particle_id == particle_id].index.values
+        for i in hit_ids:
+            for j in hit_ids:
+                if i != j:
+                    pair.append([i,j])
 
-Train0 = np.hstack((features[pair[:,0]], features[pair[:,1]], np.zeros((len(pair),1))))
+    pair = np.array(pair)
 
-Train = np.vstack((Train,Train0))
-del Train0, Train1
+    Train1 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.ones((len(pair),1))))
 
-np.random.shuffle(Train)
-print(Train.shape)
+    if len(Train) == 0:
+        Train = Train1
+    else:
+        Train = np.vstack((Train,Train1))
 
+    n = len(hits)
+    size = len(Train1)*3
+    p_id = truth.particle_id.values
+    i =np.random.randint(n, size=size)
+    j =np.random.randint(n, size=size)
+    pair = np.hstack((i.reshape(size,1),j.reshape(size,1)))
+    pair = pair[((p_id[i]==0) | (p_id[i]!=p_id[j]))]
 
+    Train0 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.zeros((len(pair),1))))
 
+    Train = np.vstack((Train,Train0))
+    del Train0, Train1
 
-'''input_list = []
-truth_list = []
+    np.random.shuffle(Train)
+    print(Train.shape)
 
-for i in range(0, len(data.x.values)):
-    for j in range(0, len(data.x.values)):
-        input = [data.x.values[i], data.y.values[i], data.z.values[i], data.x.values[j], data.y.values[j], data.z.values[j]]
-        if data.labels.values[i] == data.labels.values[j]:
-            truth = 1.0
+    return Train
+
+def get_train_data(path_to_event, add_cells = True, add_squares= False):
+    hits, cells, particles, truth = load_event(path_to_event) #"../train_sample/train_100_events/event000001000"
+    hit_cells = cells.groupby(['hit_id']).value.count().values
+    hit_value = cells.groupby(['hit_id']).value.sum().values
+    squares = (hits[['x','y','z']]/1000)**2
+    squares.columns=["x^2", "y^2", "z^2"]
+    if add_cells:
+        if add_squares:
+            features = np.hstack([pd.concat([hits[['x','y','z']]/1000, squares], axis=1), hit_cells.reshape(len(hit_cells),1)/10,hit_value.reshape(len(hit_cells),1)])
+            print(features)
         else:
-            truth = 0.0
+            features = np.hstack([hits[['x','y','z']]/1000, hit_cells.reshape(len(hit_cells),1)/10,hit_value.reshape(len(hit_cells),1)])
 
-        input_list.append(input)
-        truth_list.append(truth)
+    else:
+        if add_squares:
+            features = pd.concat([hits[['x','y','z']]/1000, squares], axis=1)
+            print(features)
 
-input_array = np.array(input_list)
-truth_array = np.array(truth_list)
+        else:
+            features = (hits[['x','y','z']]/1000)
+
+    particle_ids = truth.particle_id.unique()
+    particle_ids = particle_ids[np.where(particle_ids!=0)[0]]
+    Train=[]
+    pair = []
+    for particle_id in particle_ids:
+        hit_ids = truth[truth.particle_id == particle_id].hit_id.values-1
+        for i in hit_ids:
+            for j in hit_ids:
+                if i != j:
+                    pair.append([i,j])
+
+    pair = np.array(pair)
+    if add_cells:
+            Train1 = np.hstack((features[pair[:,0]], features[pair[:,1]], np.ones((len(pair),1))))
+    else:
+        Train1 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.ones((len(pair),1))))
+
+    if len(Train) == 0:
+        Train = Train1
+    else:
+        Train = np.vstack((Train,Train1))
+
+    n = len(hits)
+    size = len(Train1)*3
+    p_id = truth.particle_id.values
+    i =np.random.randint(n, size=size)
+    j =np.random.randint(n, size=size)
+    pair = np.hstack((i.reshape(size,1),j.reshape(size,1)))
+    pair = pair[((p_id[i]==0) | (p_id[i]!=p_id[j]))]
+
+    if add_cells:
+        Train0 = np.hstack((features[pair[:,0]], features[pair[:,1]], np.zeros((len(pair),1))))
+    else:
+        Train0 = np.hstack((features.values[pair[:,0]], features.values[pair[:,1]], np.zeros((len(pair),1))))
+
+    Train = np.vstack((Train,Train0))
+    del Train0, Train1
+
+    np.random.shuffle(Train)
+    print(Train.shape)
+
+    return Train
+
+def train_new_model(model_name, Train, with_cells=False, with_squares=False):
+    h1 = LossHistory()
+    h2 = LossHistory()
+    h3 = LossHistory()
+    if with_cells:
+        if with_squares:
+            model = keras.Sequential([
+                keras.layers.Dense(16),
+                keras.layers.Dense(800, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(200, activation="selu"),
+                keras.layers.Dense(1, activation = "sigmoid")
+                ])
+        else:
+            model = keras.Sequential([
+                keras.layers.Dense(10),
+                keras.layers.Dense(800, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(200, activation="selu"),
+                keras.layers.Dense(1, activation = "sigmoid") #activation="sigmoid"
+            ])
+
+    else:
+        if with_squares:
+            model = keras.Sequential([
+                keras.layers.Dense(12),
+                keras.layers.Dense(800, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(200, activation="selu"),
+                keras.layers.Dense(1, activation = "sigmoid")
+                ])
+        else:
+            model = keras.Sequential([
+                keras.layers.Dense(6),
+                keras.layers.Dense(800, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(400, activation="selu"),
+                keras.layers.Dense(200, activation="selu"),
+                keras.layers.Dense(1, activation = "sigmoid") #activation="sigmoid"
+            ])
+
+    lr=-5
+    model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'], do_validation=True)
+    History_1 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=1, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h1])
+
+    lr=-4
+    model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
+    History_2 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=20, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h2])
+
+    lr=-5
+    model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
+    History_3 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=3, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h3])
+
+    model.save(model_name+'.h5')
+
+    return h1, h2, h3
+
+def load_and_train(path, data, save_path=None):
+    h1 = LossHistory()
+    h2 = LossHistory()
+    h3 = LossHistory()
+    model = keras.models.load_model(path)
+    model.summary()
+    Train = data
+
+    lr=-5
+    History_1 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=1, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h1])
+
+    lr=-4
+    History_2 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=20, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h2])
+
+    lr=-5
+    History_3 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=3, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h3])
+
+    if save_path!= None:
+        model.save(save_path)
+
+    return h1, h2, h3
+
+def test_model(path_to_model, data):
+    Train = data
+    new_model = keras.models.load_model(path_to_model) #'../my_model.h5'
+    new_model.summary()
+    test = new_model.evaluate(x=Train[:,:-1], y=Train[:,-1],verbose = 1)
+    print(new_model.metrics_names)
+    print(test)
+
+def get_predictions(path_to_model, data):
+    Train = data
+    new_model = keras.models.load_model(path_to_model) #'../my_model.h5'
+    new_model.summary()
+    predictions = new_model.predict(x=Train[:,:-1], y=Train[:,-1],verbose = 1)
+    print(predictions)
+
+#################################################################################################################
+#################################################################################################################
+hits = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_2770003.csv")
+h1, h2, h3 = load_and_train("my_model_ttbar.h5", hits, "my_model_ttbar.h5")
+save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_2")
+save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_2")
+
+'''data = get_train_data("../train_sample/train_100_events/event000001001", add_cells =True, add_squares=False)
+h1, h2, h3 = load_and_train("my_model_with_cells.h5", data, save_path="my_model_with_cells_1.h5")
+save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_cells_1")
+save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_cells_1")'''
+
+'''data = get_train_data("../train_sample/train_100_events/event000001001", add_cells =True)
+print("with cells")
+test_model("my_model_with_cells.h5", data)
+
+
+data = get_train_data("../train_sample/train_100_events/event000001001", add_cells =False)
+print("without cells")
+test_model("my_model.h5", data)
 '''
-
-model = keras.Sequential([
-    keras.layers.Dense(6),
-    keras.layers.Dense(800, activation="selu"),
-    keras.layers.Dense(400, activation="selu"),
-    keras.layers.Dense(400, activation="selu"),
-    keras.layers.Dense(400, activation="selu"),
-    keras.layers.Dense(200, activation="selu"),
-    keras.layers.Dense(1, activation = "sigmoid") #activation="sigmoid"
-])
-
-lr=-5
-model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
-History = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=1, verbose=2, validation_split=0.05, shuffle=True)
-
-lr=-4
-model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
-History = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=20, verbose=2, validation_split=0.05, shuffle=True)
-
-lr=-5
-model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
-History = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=3, verbose=2, validation_split=0.05, shuffle=True)
-
-
-model.save('my_model_with_cells.h5')
-
-
-'''new_model = keras.models.load_model('../my_model.h5')
-new_model.summary()
-test = new_model.evaluate(x=Train[:,:-1], y=Train[:,-1],verbose = 1)
-print(new_model.metrics_names)
-print(test)'''
-
-'''predictions = new_model.predict(input_array)
-print(predictions)'''

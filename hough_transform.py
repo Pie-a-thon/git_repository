@@ -6,6 +6,7 @@ from skimage.transform import hough_circle, hough_circle_peaks, hough_line, houg
 import random
 import math as m
 import scipy as sp
+import pickle
 
 def load_mu(path_to_folder, number, full_out=False):
     list = np.linspace(1,5000, num=5000, dtype=int)
@@ -32,6 +33,14 @@ def load_mu(path_to_folder, number, full_out=False):
 
     else:
         return hits
+
+def save_obj(obj, name ):
+    with open(name + '.pkl', 'wb') as f:
+        pickle.dump(obj, f, pickle.HIGHEST_PROTOCOL)
+
+def load_obj(name ):
+    with open(name + '.pkl', 'rb') as f:
+        return pickle.load(f)
 
 def bin_plot(hits, num_bins=200, binary=False, mapped=False):
     if mapped:
@@ -207,9 +216,82 @@ def eta_test():
     plt.scatter(eta_list, scores)
     plt.show()
 
-eta_test()
 
 hits, cells, particles, truth  = load_event("../train_sample/train_100_events/event000001000")
+
+scores = []
+avg_scores = []
+run_list = []
+for i in range(1, 10):
+    df=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV/clusters_"+str(i)+".csv", sep=',', names=["x", "y", "z", "labels", "other", "track"])
+    df_truth=pd.read_csv("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV/truth_"+str(i)+".csv", sep=',', names=["barcode", "pt", "eta", "phi", "e", "labels"])
+    row = (df_truth.iloc[0].values)
+    df_truth = pd.DataFrame({"barcode":row[0], "pt":row[1], "eta":row[2], "phi":row[3], "e":row[4], "labels":row[5]}, index=[1])
+    df = df.fillna(0.0)
+    conformal_map(df)
+    hist = bin_plot(df, num_bins=1600, mapped=True)
+    lines = get_lines(hist, num_bins=1600, num_angles=1800, max_dist=0.001)
+    get_line_tracks(df, lines)
+    score_list, avg_score = line_score(df, lines)
+    scores.append(avg_score)
+    average = sum(scores)/len(scores)
+    avg_scores.append(average)
+    run_list.append(i)
+
+data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 1)
+conformal_map(data)
+columns = np.linspace(500, 2000, num = 20)
+rows = np.linspace(500, 2000, num = 20)
+
+heatmap = pd.DataFrame(0.0, columns=columns, index=rows)
+for j in columns:
+    for k in rows:
+        hist = bin_plot(data, num_bins=j, binary=True, mapped=True)
+        cell = line_test(hist, j, k, 1)
+        heatmap[j][k] = cell
+        print(heatmap)
+
+        heatmap.to_csv("bins_angles_"+str(int(i))+".csv")
+
+plt.imshow(heatmap)
+plt.show()
+
+print(lines)
+print(avg_scores)
+
+save_obj(scores, "muon_scores")
+save_obj(avg_scores, "muon_avg_scores")
+save_obj(run_list, "muon_runs")
+
+plt.figure(3)
+fig, ax = plt.subplots()
+for m, c in zip(lines.gradient.values, lines.intercept.values):
+        y0 = m*(-0.03) + c
+        y1 = m*(0.03) + c
+        ax.plot((-0.03, 0.03), (y0, y1), '-r')
+ax.set_xlim((-0.03, 0.03))
+ax.set_ylim((-0.03, 0.03))
+ax.set_title('Detected lines')
+
+plt.scatter(df.u, df.v, c=df.labels)
+
+plt.figure(1)
+plt.plot(run_list, scores)
+plt.title('single particle score')
+plt.ylabel('score')
+plt.xlabel('run')
+
+plt.figure(2)
+plt.plot(run_list, avg_scores)
+plt.title('single particle avg score')
+plt.ylabel('avg score')
+plt.xlabel('run')
+
+plt.show()
+
+
+
+
 
 '''conformal_map(hits)
 
@@ -252,15 +334,8 @@ plt.show()'''
 #optimize = sp.optimize.minimize(transform, x0=[8, 0.001, 0.0002], method="Nelder-Mead", bounds=[(0.0, None), (0.0, None), (0.0, None)])
 #print(optimize.x)
 
-data, truth = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 5, full_out=True)
-print(data)
-print(truth)
-conformal_map(data)
-hist = bin_plot(data, num_bins=1600, binary=True, mapped=True)
-lines = get_lines(hist, num_bins=1600, num_angles=3600)
-tracks = get_line_tracks(data, lines)
 
-print(lines)
+'''print(lines)
 
 score_list, avg_score = line_score(data, lines)
 print(score_list)
@@ -290,4 +365,4 @@ ax.set_xlim((0, hist.shape[1]))
 ax.set_ylim((0, hist.shape[0]))
 ax.set_title('Detected lines')
 
-plt.show()
+plt.show()'''
