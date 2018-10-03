@@ -46,6 +46,31 @@ def load_mu(path_to_folder, number):
 
     return hits
 
+
+def conformal_map(hits, x0=0, y0=0):
+    x = hits.x.values
+    y = hits.y.values
+    u_list = []
+    v_list = []
+    phi_list = []
+    rho_list = []
+    for i in range (0, len(hits.index.values)):
+        r_sq = ((x[i]-x0)**2 + (y[i]-y0)**2)
+        u = (x[i]-x0)/r_sq
+        v = (y[i]-y0)/r_sq
+        phi = np.arctan2(v, u)
+        rho = m.sqrt(u**2 + v**2)
+        d = u*np.cos(phi) + v*np.sin(phi)
+        u_list.append(u)
+        v_list.append(v)
+        phi_list.append(phi)
+        rho_list.append(rho)
+
+    hits["u"] = pd.Series(u_list, index = hits.index)
+    hits["v"] = pd.Series(v_list, index = hits.index)
+    hits["phi"] = pd.Series(phi_list, index = hits.index)
+    hits["rho"] = pd.Series(rho_list, index = hits.index)
+
 def muons():
 
     data = load_mu("..\cernbox\inputs_ATLAS_step3_26082018/mu1GeV", 3)
@@ -86,12 +111,29 @@ def muons():
     print(Train)
     return Train
 
-def get_t_tbar(path):
+def get_t_tbar(path, add_squares=False, mapped=False):
     hits = pd.read_csv(path, sep=',', names=["x", "y", "z", "particle_id", "particle_id_1", "particle_id_2"])
     hits = hits.fillna(0.0)
+    squares = (hits[['x','y','z']]/1000)**2
+    squares.columns=["x^2", "y^2", "z^2"]
+    if mapped:
+        conformal_map(hits)
+        map_vals = hits[["u", "v", "phi"]]
     truth = hits
-    print(hits)
-    features = (hits[['x','y','z']]/1000)
+    if add_squares:
+        if mapped:
+            features = pd.concat([hits[['x','y','z']]/1000, squares, map_vals], axis=1)
+        else:
+            features = pd.concat([hits[['x','y','z']]/1000, squares], axis=1)
+
+    else:
+        if mapped:
+            features = pd.concat([hits[['x','y','z']]/1000, map_vals], axis=1)
+        else:
+            features = (hits[['x','y','z']]/1000)
+
+
+    print(features)
 
     particle_ids = truth.particle_id.unique()
     particle_ids = particle_ids[np.where(particle_ids!=0)[0]]
@@ -195,53 +237,28 @@ def get_train_data(path_to_event, add_cells = True, add_squares= False):
 
     return Train
 
-def train_new_model(model_name, Train, with_cells=False, with_squares=False):
+def train_new_model(model_name, Train, with_cells=False, with_squares=False, with_mapped=False):
     h1 = LossHistory()
     h2 = LossHistory()
     h3 = LossHistory()
-    if with_cells:
-        if with_squares:
-            model = keras.Sequential([
-                keras.layers.Dense(16),
-                keras.layers.Dense(800, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(200, activation="selu"),
-                keras.layers.Dense(1, activation = "sigmoid")
-                ])
-        else:
-            model = keras.Sequential([
-                keras.layers.Dense(10),
-                keras.layers.Dense(800, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(200, activation="selu"),
-                keras.layers.Dense(1, activation = "sigmoid") #activation="sigmoid"
-            ])
 
-    else:
-        if with_squares:
-            model = keras.Sequential([
-                keras.layers.Dense(12),
-                keras.layers.Dense(800, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(200, activation="selu"),
-                keras.layers.Dense(1, activation = "sigmoid")
-                ])
-        else:
-            model = keras.Sequential([
-                keras.layers.Dense(6),
-                keras.layers.Dense(800, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(400, activation="selu"),
-                keras.layers.Dense(200, activation="selu"),
-                keras.layers.Dense(1, activation = "sigmoid") #activation="sigmoid"
-            ])
+    num_inputs = 6
+    if with_cells:
+        num_inputs = num_inputs + 4
+    if with_squares:
+        num_inputs = num_inputs + 6
+    if with_mapped:
+        num_inputs = num_inputs + 6
+
+    model = keras.Sequential([
+        keras.layers.Dense(num_inputs),
+        keras.layers.Dense(800, activation="selu"),
+        keras.layers.Dense(400, activation="selu"),
+        keras.layers.Dense(400, activation="selu"),
+        keras.layers.Dense(400, activation="selu"),
+        keras.layers.Dense(200, activation="selu"),
+        keras.layers.Dense(1, activation = "sigmoid")
+        ])
 
     lr=-5
     model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'], do_validation=True)
@@ -255,7 +272,7 @@ def train_new_model(model_name, Train, with_cells=False, with_squares=False):
     model.compile(loss=['binary_crossentropy'], optimizer=keras.optimizers.Adam(lr=10**(lr)), metrics=['accuracy'])
     History_3 = model.fit(x=Train[:,:-1], y=Train[:,-1], batch_size=8000, epochs=3, verbose=1, validation_split=0.05, shuffle=True,callbacks=[h3])
 
-    model.save(model_name+'.h5')
+    model.save(model_name)
 
     return h1, h2, h3
 
@@ -298,10 +315,42 @@ def get_predictions(path_to_model, data):
 
 #################################################################################################################
 #################################################################################################################
-hits = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_2770003.csv")
-h1, h2, h3 = load_and_train("my_model_ttbar.h5", hits, "my_model_ttbar.h5")
-save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_2")
-save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_2")
+def test_on_event(event, existing_model):
+    hits = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(event)+".csv",mapped=False, add_squares=False)
+    if existing_model:
+        h1, h2, h3 = load_and_train("my_model_ttbar.h5", hits, "my_model_ttbar.h5")
+    else:
+        h1, h2, h3 = train_new_model("my_model_ttbar.h5", hits)
+    save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_"+str(event))
+    save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_"+str(event))
+
+    hits = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(event)+".csv",mapped=False, add_squares=True)
+    if existing_model:
+        h1, h2, h3 = load_and_train("my_model_ttbar_squares.h5", hits, "my_model_ttbar_squares.h5")
+    else:
+        h1, h2, h3 = train_new_model("my_model_ttbar_squares.h5", hits, with_squares=True)
+    save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_"+str(event)+"_squares")
+    save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_"+str(event)+"_squares")
+
+    hits = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(event)+".csv",mapped=True, add_squares=False)
+    if existing_model:
+        h1, h2, h3 = load_and_train("my_model_ttbar_mapped.h5", hits, "my_model_ttbar_mapped.h5")
+    else:
+        h1, h2, h3 = train_new_model("my_model_ttbar_mapped.h5", hits, with_mapped=True)
+    save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_"+str(event)+"_mapped")
+    save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_"+str(event)+"_mapped")
+
+test_on_event(1, existing_model=False)
+test_on_event(2, existing_model=True)
+test_on_event(3, existing_model=True)
+
+'''h1, h2, h3 = load_and_train("my_model_ttbar.h5", hits, "my_model_ttbar.h5")
+save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_3")
+save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_3")
+
+h1, h2, h3 = load_and_train("my_model_ttbar_squares.h5", hits, "my_model_ttbar_squares.h5")
+save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_3_squares")
+save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_3_squares")'''
 
 '''data = get_train_data("../train_sample/train_100_events/event000001001", add_cells =True, add_squares=False)
 h1, h2, h3 = load_and_train("my_model_with_cells.h5", data, save_path="my_model_with_cells_1.h5")

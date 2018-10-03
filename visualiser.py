@@ -48,31 +48,64 @@ def acc_losses():
     plt.legend(['With cells', 'Without cells', "with squares"], loc='upper left')
     plt.show()
 
-losses0 = load_obj("losses_ttbar_1")
-losses1 = load_obj("losses_ttbar_2")
+losses00 = load_obj("losses_ttbar_1")
+losses01 = load_obj("losses_ttbar_2")
+losses02 = load_obj("losses_ttbar_3")
 
-acc0 = load_obj("accuracy_ttbar_1")
-acc1 = load_obj("accuracy_ttbar_2")
 
-print(len(acc1)/24)
-batches0 = np.linspace(12.0, len(losses0)-1, num = 24, dtype=int)
-batches1 = np.linspace(26.0, len(losses1)-1, num = 24, dtype=int)
-batches = np.hstack([batches0, batches1])
-losses = np.hstack([losses0[batches0], losses1[batches1]])
-acc = np.hstack([acc0[batches0], acc1[batches1]])
-epochs0 = np.linspace(0, 24, num=24)
-epochs = np.linspace(0, 48, num=48)
+losses10 = load_obj("losses_ttbar_1_squares")
+losses11 = load_obj("losses_ttbar_2_squares")
+losses12 = load_obj("losses_ttbar_3_squares")
 
-plt.plot(epochs, losses)
+
+losses20 = load_obj("losses_ttbar_1_mapped")
+losses21 = load_obj("losses_ttbar_2_mapped")
+losses22 = load_obj("losses_ttbar_3_mapped")
+
+
+acc00 = load_obj("accuracy_ttbar_1")
+acc01 = load_obj("accuracy_ttbar_2")
+acc02 = load_obj("accuracy_ttbar_3")
+
+
+acc10 = load_obj("accuracy_ttbar_1_squares")
+acc11 = load_obj("accuracy_ttbar_2_squares")
+acc12 = load_obj("accuracy_ttbar_3_squares")
+
+
+acc20 = load_obj("accuracy_ttbar_1_mapped")
+acc21 = load_obj("accuracy_ttbar_2_mapped")
+acc22 = load_obj("accuracy_ttbar_3_mapped")
+
+batches00 = np.linspace(len(acc00)/24, len(losses00)-1, num = 24, dtype=int)
+batches01 = np.linspace(len(acc01)/24, len(losses01)-1, num = 24, dtype=int)
+batches02 = np.linspace(len(acc02)/24, len(losses02)-1, num = 24, dtype=int)
+
+
+losses = np.hstack([losses00[batches00], losses01[batches01], losses02[batches02]])
+acc = np.hstack([acc00[batches00], acc01[batches01], acc02[batches02]])
+losses_sq = np.hstack([losses10[batches00], losses11[batches01], losses12[batches02]])
+acc_sq = np.hstack([acc10[batches00], acc11[batches01], acc12[batches02]])
+losses_mapped = np.hstack([losses20[batches00], losses21[batches01], losses22[batches02]])
+acc_mapped = np.hstack([acc20[batches00], acc21[batches01], acc22[batches02]])
+
+epochs0 = np.linspace(0, 72, num=72)
+epochs1 = np.linspace(0, 48, num=48)
+
+plt.plot(epochs0, losses)
+plt.plot(epochs0, losses_sq)
+plt.plot(epochs0, losses_mapped)
 plt.title('Model loss')
 plt.ylabel('loss')
 plt.xlabel('Epoch')
-plt.legend(['With cells', 'Without cells', "with squares"], loc='upper left')
+plt.legend(['xyz only', "with squares", "with mapped"], loc='upper left')
 
 plt.figure(2)
-plt.plot(epochs, acc)
+plt.plot(epochs0, acc)
+plt.plot(epochs0, acc_sq)
+plt.plot(epochs0, acc_mapped)
 plt.title('Model accuracy')
 plt.ylabel('Accuracy')
 plt.xlabel('Epoch')
-plt.legend(['With cells', 'Without cells', "with squares"], loc='upper left')
+plt.legend(['xyz only', "with squares", "with mapped"], loc='upper left')
 plt.show()
