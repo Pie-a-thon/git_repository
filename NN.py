@@ -340,9 +340,58 @@ def test_on_event(event, existing_model):
     save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_"+str(event)+"_mapped")
     save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), "losses_ttbar_"+str(event)+"_mapped")
 
-test_on_event(1, existing_model=False)
-test_on_event(2, existing_model=True)
-test_on_event(3, existing_model=True)
+def test_on_multi_events(events, prefix = "", existing_model=False):
+    hits = []
+    for i in events:
+        event = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(i)+".csv",mapped=False, add_squares=False)
+        if len(hits) == 0:
+            hits = event
+        else:
+            hits = np.concatenate([hits, event], axis=0)
+        print(hits.shape)
+    np.random.shuffle(hits)
+    if existing_model:
+        h1, h2, h3 = load_and_train(str(prefix)+"my_model_ttbar.h5", hits, str(prefix)+"my_model_ttbar.h5")
+    else:
+        h1, h2, h3 = train_new_model(str(prefix)+"my_model_ttbar.h5", hits)
+    save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), str(prefix)+"accuracy_ttbar")
+    save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), str(prefix)+"losses_ttbar")
+
+    hits = []
+    for i in events:
+        event = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(i)+".csv",mapped=False, add_squares=True)
+        if len(hits) == 0:
+            hits = event
+        else:
+            hits = np.concatenate([hits, event], axis=0)
+        print(hits.shape)
+    np.random.shuffle(hits)
+    if existing_model:
+        h1, h2, h3 = load_and_train(str(prefix)+"my_model_ttbar_squares.h5", hits, str(prefix)+"my_model_ttbar_squares.h5")
+    else:
+        h1, h2, h3 = train_new_model(str(prefix)+"my_model_ttbar_squares.h5", hits, with_squares=True)
+        save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), str(prefix)+"accuracy_ttbar_squares")
+        save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), str(prefix)+"losses_ttbar_squares")
+
+    hits = []
+    for i in events:
+        event = get_t_tbar("..\cernbox\inputs_ATLAS_step3_26082018/ttbar\clusters_277000"+str(i)+".csv",mapped=True, add_squares=False)
+        if len(hits) == 0:
+            hits = event
+        else:
+            hits = np.concatenate([hits, event], axis=0)
+        print(hits.shape)
+    np.random.shuffle(hits)
+    if existing_model:
+        h1, h2, h3 = load_and_train(str(prefix)+"my_model_ttbar_mapped.h5", hits, str(prefix)+"my_model_ttbar_mapped.h5")
+    else:
+        h1, h2, h3 = train_new_model(str(prefix)+"my_model_ttbar_mapped.h5", hits, with_mapped=True)
+    save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), str(prefix)+"accuracy_ttbar_mapped")
+    save_obj(np.hstack([h1.losses, h2.losses, h3.losses]), str(prefix)+"losses_ttbar_mapped")
+
+events = np.linspace(1,9, num=9, dtype=int)
+test_on_multi_events(events, existing_model=False)
+
 
 '''h1, h2, h3 = load_and_train("my_model_ttbar.h5", hits, "my_model_ttbar.h5")
 save_obj(np.hstack([h1.acc, h2.acc, h3.acc]), "accuracy_ttbar_3")
